@@ -3,6 +3,7 @@ import pickle
 import numpy as np
 import networkx as nx
 
+import torch
 from gensim.models.word2vec import Word2Vec, KeyedVectors
 
 
@@ -82,11 +83,31 @@ class word2vec:
                          sg=0, hs=0, cbow_mean=1, epochs=5)
         self.model = model
 
-    def infer(self, inst):
+    def infer(self, normed_inst):
         if self.model is None:
             raise ValueError('Word2Vec model is not loaded yet, load with word2vec.load() first')
         
-        if inst in self.model.wv:
-            return self.model.wv[inst]
+        if normed_inst in self.model.wv:
+            return self.model.wv[normed_inst]
         else:
             return np.zeros(self.model.wv.vector_size, dtype=np.float32)
+
+
+class DataProcessor(word2vec):
+    def __init__(self):
+        super().__init__()
+        self.normalizer = AssemblyNormalizer()
+        
+    def from_networkx(self, G):
+        normalize = self.normalizer.normalize
+        name_dict = {node: i for i, node in enumerate(G.nodes)}
+
+        nodes = torch.zeros((len(G.nodes), self.model.wv.vector_size))
+        for node, i in name_dict.items():
+            node_asm = G.nodes[node]['x']
+            node_vecs  = np.vstack([self.infer(normalize(asm)) for _, asm in node_asm])
+            nodes[i] = torch.tensor(node_vecs.sum(axis=0))
+
+        edges = torch.tensor([[name_dict[edge[0]], name_dict[edge[1]]] for i, edge in enumerate(G.edges)], dtype=torch.long).T
+
+        return nodes, edges
