@@ -1,5 +1,4 @@
 FCGs/
-model_saved/
 *.csv
 *ipynb_checkpoints*
 *__pycache__*

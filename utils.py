@@ -1,6 +1,8 @@
+import os
 import re
 import pickle
 import numpy as np
+import pandas as pd
 import networkx as nx
 
 import torch
@@ -11,6 +13,33 @@ def read_pickle(path):
     with open(path, 'rb') as f:
         G = pickle.load(f)
     return G
+
+
+def get_file_paths(target_dir, extension='.pickle'):
+    paths = []
+    for root, dirs, files in os.walk(target_dir):
+        if len(dirs)==0 and len(files) > 0:
+            for f in files:
+                if f.endswith(extension):
+                    paths.append(os.path.join(root, f))
+    return paths
+
+
+def split_df(df, n_or_frac, column='family', shuffle=True, allow_lower_n=False):
+    if type(n_or_frac) is int:
+        if allow_lower_n:
+            train_df = df.groupby(column).apply(lambda x: x.sample(n=n_or_frac if x.shape[0]>=n_or_frac else x.shape[0])).droplevel(level=0)
+        else:
+            train_df = df.groupby(column).sample(n=n_or_frac)
+                
+    else:
+        train_df = df.groupby(column).sample(frac=n_or_frac)
+    valid_df = df[~df.index.isin(train_df.index)]
+    
+    if shuffle:
+        train_df = train_df.sample(frac=1)
+        valid_df = valid_df.sample(frac=1)
+    return train_df, valid_df
 
 
 class AssemblyNormalizer:
@@ -68,10 +97,10 @@ class AssemblyNormalizer:
 
 class word2vec:
     def __init__(self):
-        self.model = None
+        self.wv = None
     
     def load(self, path):
-        self.model = Word2Vec.load(path)
+        self.wv = KeyedVectors.load(path, mmap="r")
         
     def train(self, sentences):
         # sg=0: use CBOW instead of skip-gram
@@ -82,15 +111,16 @@ class word2vec:
                          min_count=0, window=5, workers=4, 
                          sg=0, hs=0, cbow_mean=1, epochs=5)
         self.model = model
+        self.wv = model.wv
 
     def infer(self, normed_inst):
-        if self.model is None:
+        if self.wv is None:
             raise ValueError('Word2Vec model is not loaded yet, load with word2vec.load() first')
         
-        if normed_inst in self.model.wv:
-            return self.model.wv[normed_inst]
+        if normed_inst in self.wv:
+            return self.wv[normed_inst]
         else:
-            return np.zeros(self.model.wv.vector_size, dtype=np.float32)
+            return np.zeros(self.wv.vector_size, dtype=np.float32)
 
 
 class DataProcessor(word2vec):
@@ -102,7 +132,7 @@ class DataProcessor(word2vec):
         normalize = self.normalizer.normalize
         name_dict = {node: i for i, node in enumerate(G.nodes)}
 
-        nodes = torch.zeros((len(G.nodes), self.model.wv.vector_size))
+        nodes = torch.zeros((len(G.nodes), self.wv.vector_size))
         for node, i in name_dict.items():
             node_asm = G.nodes[node]['x']
             node_vecs  = np.vstack([self.infer(normalize(asm)) for _, asm in node_asm])
