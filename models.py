@@ -12,7 +12,9 @@ class GCN(torch.nn.Module):
         self.conv2 = GCNConv(hidden_channels, hidden_channels)
         self.lin = Linear(hidden_channels, num_classes)
 
-    def forward(self, x, edge_index, batch):
+    def forward(self, data_batch):
+        x, edge_index, batch = data_batch.x, data_batch.edge_index, data_batch.batch
+        
         # 1. Obtain node embeddings 
         x = self.conv1(x, edge_index)
         x = x.relu()
@@ -24,6 +26,15 @@ class GCN(torch.nn.Module):
         # 3. Apply a final classifier
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.lin(x)
+        
+        ## ignore softmax activation here, since we can obtain
+        ## higher accuracy in our case
         # x = F.softmax(x, dim=1)
         
         return x
+    
+    def predict_prob(self, data_batch):
+        x = self.forward(data_batch)
+        x = F.softmax(x, dim=1)
+        return x
+        
