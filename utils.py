@@ -7,6 +7,7 @@ import networkx as nx
 
 import torch
 from gensim.models.word2vec import Word2Vec, KeyedVectors
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 
 def read_pickle(path):
@@ -139,5 +140,16 @@ class DataProcessor(word2vec):
             nodes[i] = torch.tensor(node_vecs.sum(axis=0))
 
         edges = torch.tensor([[name_dict[edge[0]], name_dict[edge[1]]] for i, edge in enumerate(G.edges)], dtype=torch.long).T
-
         return nodes, edges
+
+
+def compute_metrices(y_true, y_pred):
+    accuracy  = accuracy_score(y_true=y_true, y_pred=y_pred)
+    precision = precision_score(y_true=y_true, y_pred=y_pred)
+    recall    = recall_score(y_true=y_true, y_pred=y_pred)
+    f1        = f1_score(y_true=y_true, y_pred=y_pred)
+    metrices  = {'accuracy':  accuracy, 
+                 'precision': precision, 
+                 'recall':    recall, 
+                 'f1':        f1}
+    return metrices
